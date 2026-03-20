@@ -28,15 +28,6 @@ EventBridge (1h毎) ──▶ outlook-sync Lambda
                             │
                       予定時刻に自動実行
 ```
-
-### 記事との主な差分
-
-| 項目 | 原案 | 本デモ | 理由 |
-|------|------|--------|------|
-| API Gateway | あり | Lambda Function URL | 無料・設定簡素 |
-| Lambda数 | 7個 | 3個(+1トリガー) | EKS不要で統合 |
-| EKS操作 | あり | なし | デモ対象外 |
-
 ## 前提条件
 
 - AWS CLI 設定済み
