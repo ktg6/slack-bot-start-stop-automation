@@ -54,6 +54,31 @@ variable "outlook_calendar_email" {
   default     = ""
 }
 
+# staging/prod 環境のリソースID（本番運用時は tfvars で上書き）
+variable "staging_ec2_instance_ids" {
+  description = "staging環境のEC2インスタンスID（カンマ区切り）"
+  type        = string
+  default     = "placeholder"
+}
+
+variable "staging_rds_instance_id" {
+  description = "staging環境のRDSインスタンスID"
+  type        = string
+  default     = "placeholder"
+}
+
+variable "prod_ec2_instance_ids" {
+  description = "prod環境のEC2インスタンスID（カンマ区切り）"
+  type        = string
+  default     = "placeholder"
+}
+
+variable "prod_rds_instance_id" {
+  description = "prod環境のRDSインスタンスID"
+  type        = string
+  default     = "placeholder"
+}
+
 # デモ用EC2/RDS設定
 variable "ec2_ami_id" {
   description = "AMI ID for demo EC2 instance"

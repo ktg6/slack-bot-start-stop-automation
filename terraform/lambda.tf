@@ -100,7 +100,7 @@ resource "aws_lambda_function" "outlook_sync" {
 resource "aws_lambda_function" "sfn_trigger" {
   function_name = "${var.project_name}-sfn-trigger"
   role          = aws_iam_role.sfn_trigger.arn
-  handler       = "index.handler"
+  handler       = "sfn-trigger/index.handler"
   runtime       = "nodejs20.x"
   timeout       = 10
   memory_size   = 128
