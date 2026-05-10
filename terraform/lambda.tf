@@ -23,10 +23,12 @@ resource "aws_lambda_function" "slack_handler" {
 
   environment {
     variables = {
-      SLACK_BOT_TOKEN      = var.slack_bot_token
-      SLACK_SIGNING_SECRET = var.slack_signing_secret
-      SLACK_CHANNEL_ID     = var.slack_channel_id
-      STEP_FUNCTIONS_ARN   = aws_sfn_state_machine.main.arn
+      SLACK_BOT_TOKEN                    = var.slack_bot_token
+      SLACK_SIGNING_SECRET               = var.slack_signing_secret
+      SLACK_BOT_TOKEN_SECRET_ARN         = var.slack_bot_token_secret_arn
+      SLACK_SIGNING_SECRET_SECRET_ARN    = var.slack_signing_secret_secret_arn
+      SLACK_CHANNEL_ID                   = var.slack_channel_id
+      STEP_FUNCTIONS_ARN                 = aws_sfn_state_machine.main.arn
     }
   }
 
@@ -55,8 +57,9 @@ resource "aws_lambda_function" "resource_operator" {
 
   environment {
     variables = {
-      SLACK_BOT_TOKEN  = var.slack_bot_token
-      SLACK_CHANNEL_ID = var.slack_channel_id
+      SLACK_BOT_TOKEN             = var.slack_bot_token
+      SLACK_BOT_TOKEN_SECRET_ARN  = var.slack_bot_token_secret_arn
+      SLACK_CHANNEL_ID            = var.slack_channel_id
     }
   }
 
@@ -79,14 +82,16 @@ resource "aws_lambda_function" "outlook_sync" {
 
   environment {
     variables = {
-      SLACK_BOT_TOKEN        = var.slack_bot_token
-      SLACK_CHANNEL_ID       = var.slack_channel_id
-      STEP_FUNCTIONS_ARN     = aws_sfn_state_machine.main.arn
-      OUTLOOK_TENANT_ID      = var.outlook_tenant_id
-      OUTLOOK_CLIENT_ID      = var.outlook_client_id
-      OUTLOOK_CLIENT_SECRET  = var.outlook_client_secret
-      OUTLOOK_CALENDAR_EMAIL = var.outlook_calendar_email
-      SFN_TRIGGER_LAMBDA_ARN = aws_lambda_function.sfn_trigger.arn
+      SLACK_BOT_TOKEN                      = var.slack_bot_token
+      SLACK_BOT_TOKEN_SECRET_ARN           = var.slack_bot_token_secret_arn
+      SLACK_CHANNEL_ID                     = var.slack_channel_id
+      STEP_FUNCTIONS_ARN                   = aws_sfn_state_machine.main.arn
+      OUTLOOK_TENANT_ID                    = var.outlook_tenant_id
+      OUTLOOK_CLIENT_ID                    = var.outlook_client_id
+      OUTLOOK_CLIENT_SECRET                = var.outlook_client_secret
+      OUTLOOK_CLIENT_SECRET_SECRET_ARN     = var.outlook_client_secret_secret_arn
+      OUTLOOK_CALENDAR_EMAIL               = var.outlook_calendar_email
+      SFN_TRIGGER_LAMBDA_ARN               = aws_lambda_function.sfn_trigger.arn
     }
   }
 

@@ -1,4 +1,18 @@
 # ---------- Lambda共通の実行ロール ----------
+locals {
+  slack_handler_secret_arns = compact([
+    var.slack_bot_token_secret_arn,
+    var.slack_signing_secret_secret_arn,
+  ])
+  resource_operator_secret_arns = compact([
+    var.slack_bot_token_secret_arn,
+  ])
+  outlook_sync_secret_arns = compact([
+    var.slack_bot_token_secret_arn,
+    var.outlook_client_secret_secret_arn,
+  ])
+}
+
 data "aws_iam_policy_document" "lambda_assume" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -31,6 +45,13 @@ data "aws_iam_policy_document" "slack_handler" {
     actions   = ["ssm:GetParameter"]
     resources = ["arn:aws:ssm:${var.aws_region}:*:parameter/start-stop/*"]
   }
+  dynamic "statement" {
+    for_each = length(local.slack_handler_secret_arns) > 0 ? [1] : []
+    content {
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = local.slack_handler_secret_arns
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "slack_handler" {
@@ -60,6 +81,13 @@ data "aws_iam_policy_document" "resource_operator" {
   statement {
     actions   = ["rds:StartDBInstance", "rds:StopDBInstance", "rds:DescribeDBInstances"]
     resources = ["*"]
+  }
+  dynamic "statement" {
+    for_each = length(local.resource_operator_secret_arns) > 0 ? [1] : []
+    content {
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = local.resource_operator_secret_arns
+    }
   }
 }
 
@@ -99,6 +127,13 @@ data "aws_iam_policy_document" "outlook_sync" {
   statement {
     actions   = ["ssm:GetParameter"]
     resources = ["arn:aws:ssm:${var.aws_region}:*:parameter/start-stop/*"]
+  }
+  dynamic "statement" {
+    for_each = length(local.outlook_sync_secret_arns) > 0 ? [1] : []
+    content {
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = local.outlook_sync_secret_arns
+    }
   }
 }
 

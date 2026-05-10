@@ -48,12 +48,14 @@ resource "aws_ssm_parameter" "slack_channel_id" {
 }
 
 resource "aws_ssm_parameter" "slack_bot_token" {
+  count = var.slack_bot_token != "" ? 1 : 0
   name  = "/start-stop/slack-bot-token"
   type  = "SecureString"
   value = var.slack_bot_token
 }
 
 resource "aws_ssm_parameter" "slack_signing_secret" {
+  count = var.slack_signing_secret != "" ? 1 : 0
   name  = "/start-stop/slack-signing-secret"
   type  = "SecureString"
   value = var.slack_signing_secret

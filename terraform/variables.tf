@@ -15,12 +15,14 @@ variable "slack_bot_token" {
   description = "Slack Bot Token (xoxb-...)"
   type        = string
   sensitive   = true
+  default     = ""
 }
 
 variable "slack_signing_secret" {
   description = "Slack Signing Secret"
   type        = string
   sensitive   = true
+  default     = ""
 }
 
 variable "slack_channel_id" {
@@ -45,6 +47,25 @@ variable "outlook_client_secret" {
   description = "Microsoft Entra App Client Secret"
   type        = string
   sensitive   = true
+  default     = ""
+}
+
+# Secrets Manager ARN (推奨)
+variable "slack_bot_token_secret_arn" {
+  description = "Secrets Manager ARN for Slack bot token"
+  type        = string
+  default     = ""
+}
+
+variable "slack_signing_secret_secret_arn" {
+  description = "Secrets Manager ARN for Slack signing secret"
+  type        = string
+  default     = ""
+}
+
+variable "outlook_client_secret_secret_arn" {
+  description = "Secrets Manager ARN for Outlook client secret"
+  type        = string
   default     = ""
 }
 
@@ -102,10 +123,4 @@ variable "rds_master_username" {
   description = "RDS master username"
   type        = string
   default     = "admin"
-}
-
-variable "rds_master_password" {
-  description = "RDS master password"
-  type        = string
-  sensitive   = true
 }

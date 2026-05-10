@@ -1,6 +1,7 @@
 node_modules/
 dist/
 *.zip
+# Note: lambdas/package-lock.json はコミット対象（npm ci による再現性確保のため削除しないこと）
 .DS_Store
 
 # Terraform

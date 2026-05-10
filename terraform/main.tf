@@ -131,7 +131,8 @@ resource "aws_db_instance" "demo" {
   allocated_storage      = 20
   db_name                = "demo"
   username               = var.rds_master_username
-  password               = var.rds_master_password
+  # パスワードはAWSが自動生成してSecrets Managerで管理（Terraformに渡す必要なし）
+  manage_master_user_password = true
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [aws_security_group.rds.id]
   skip_final_snapshot    = true

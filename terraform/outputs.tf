@@ -22,3 +22,8 @@ output "outlook_sync_lambda_arn" {
   description = "Outlook同期Lambda ARN"
   value       = aws_lambda_function.outlook_sync.arn
 }
+
+output "rds_master_user_secret_arn" {
+  description = "RDSマスターパスワードが格納されたSecrets Manager ARN（パスワード確認時に使用）"
+  value       = aws_db_instance.demo.master_user_secret[0].secret_arn
+}
