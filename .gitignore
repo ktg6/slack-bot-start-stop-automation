@@ -9,6 +9,7 @@ terraform/.terraform/
 terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/*.tfvars
+terraform/backend.hcl
 terraform/dummy.zip
 terraform/.terraform.lock.hcl
 
@@ -26,4 +27,3 @@ secrets/
 
 # Claude Code settings
 .claude/settings.local.json
-

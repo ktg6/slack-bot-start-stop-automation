@@ -74,6 +74,10 @@ npm run package
 # 3. Terraform実行
 cd ../terraform
 
+# backend.hcl.example をコピーして backend.hcl を作成
+cp backend.hcl.example backend.hcl
+# backend.hcl の bucket / kms_key_id などを実環境の値に修正
+
 # terraform.tfvars を作成
 cat > terraform.tfvars <<EOF
 slack_channel_id     = "C0XXXXXXXXX"
@@ -94,7 +98,7 @@ outlook_client_secret_secret_arn = ""
 # outlook_client_secret  = ""
 EOF
 
-terraform init
+terraform init -reconfigure -backend-config=backend.hcl
 terraform plan
 terraform apply
 

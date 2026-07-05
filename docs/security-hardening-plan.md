@@ -21,9 +21,17 @@
   - 推奨: Terraform 1.10+ なら S3 lockfile (`use_lockfile = true`)
   - 互換重視: DynamoDB lock（既存運用で広く利用）
 
-### backend 設定ファイル（例）
+### backend 設定ファイル
 
-`terraform/backend.hcl`（Git管理しない）
+リポジトリに `terraform/backend.tf` と `terraform/backend.hcl.example` を追加済み。
+
+- `terraform/backend.tf`
+  - `backend "s3" {}` のみ定義
+- `terraform/backend.hcl.example`
+  - 実値を入れるための雛形
+
+実運用では `terraform/backend.hcl` を `backend.hcl.example` から作成して使う。
+`terraform/backend.hcl` は Git 管理しない。
 
 ```hcl
 bucket         = "start-stop-tfstate-prod"
@@ -38,6 +46,8 @@ use_lockfile   = true
 
 ```bash
 cd terraform
+cp backend.hcl.example backend.hcl
+# backend.hcl を実環境の値に修正
 terraform init -reconfigure -backend-config=backend.hcl
 terraform state pull > /tmp/tfstate.backup.json
 terraform plan
