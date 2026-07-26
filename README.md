@@ -84,7 +84,7 @@ slack_channel_id     = "C0XXXXXXXXX"
 
 # 推奨: Secrets Manager ARNを指定（値そのものは渡さない）
 slack_bot_token_secret_arn          = "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:slack-bot-token-xxxx"
-slack_signing_secret_secret_arn     = "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:slack-signing-secret-xxxx"
+slack_signing_secret_arn            = "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:slack-signing-secret-xxxx"
 
 # Outlook連携（任意）
 outlook_tenant_id      = ""

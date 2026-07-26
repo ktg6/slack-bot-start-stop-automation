@@ -2,7 +2,7 @@
 locals {
   slack_handler_secret_arns = compact([
     var.slack_bot_token_secret_arn,
-    var.slack_signing_secret_secret_arn,
+    var.slack_signing_secret_arn,
   ])
   resource_operator_secret_arns = compact([
     var.slack_bot_token_secret_arn,

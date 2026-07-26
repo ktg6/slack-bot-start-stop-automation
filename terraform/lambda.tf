@@ -26,7 +26,7 @@ resource "aws_lambda_function" "slack_handler" {
       SLACK_BOT_TOKEN                    = var.slack_bot_token
       SLACK_SIGNING_SECRET               = var.slack_signing_secret
       SLACK_BOT_TOKEN_SECRET_ARN         = var.slack_bot_token_secret_arn
-      SLACK_SIGNING_SECRET_SECRET_ARN    = var.slack_signing_secret_secret_arn
+      SLACK_SIGNING_SECRET_ARN           = var.slack_signing_secret_arn
       SLACK_CHANNEL_ID                   = var.slack_channel_id
       STEP_FUNCTIONS_ARN                 = aws_sfn_state_machine.main.arn
     }

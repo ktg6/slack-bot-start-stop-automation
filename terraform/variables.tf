@@ -57,7 +57,7 @@ variable "slack_bot_token_secret_arn" {
   default     = ""
 }
 
-variable "slack_signing_secret_secret_arn" {
+variable "slack_signing_secret_arn" {
   description = "Secrets Manager ARN for Slack signing secret"
   type        = string
   default     = ""

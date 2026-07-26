@@ -18,7 +18,7 @@ const secrets = new SecretsManagerClient({});
 const stepFunctionsArn = process.env.STEP_FUNCTIONS_ARN ?? "";
 const slackChannelId = process.env.SLACK_CHANNEL_ID ?? "";
 const slackBotTokenSecretArn = process.env.SLACK_BOT_TOKEN_SECRET_ARN ?? "";
-const slackSigningSecretSecretArn = process.env.SLACK_SIGNING_SECRET_SECRET_ARN ?? "";
+const slackSigningSecretSecretArn = process.env.SLACK_SIGNING_SECRET_ARN ?? "";
 
 let lambdaHandlerPromise: Promise<
   (event: AwsEvent, context: unknown, callback: unknown) => Promise<unknown>

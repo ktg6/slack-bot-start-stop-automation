@@ -93,7 +93,7 @@ variable "slack_bot_token_secret_arn" {
   type        = string
 }
 
-variable "slack_signing_secret_secret_arn" {
+variable "slack_signing_secret_arn" {
   description = "Secrets Manager ARN for Slack signing secret"
   type        = string
 }
@@ -113,7 +113,7 @@ variable "outlook_client_secret_secret_arn" {
 environment {
   variables = {
     SLACK_BOT_TOKEN_SECRET_ARN      = var.slack_bot_token_secret_arn
-    SLACK_SIGNING_SECRET_SECRET_ARN = var.slack_signing_secret_secret_arn
+    SLACK_SIGNING_SECRET_ARN        = var.slack_signing_secret_arn
   }
 }
 ```
@@ -133,7 +133,7 @@ statement {
   actions   = ["secretsmanager:GetSecretValue"]
   resources = [
     var.slack_bot_token_secret_arn,
-    var.slack_signing_secret_secret_arn,
+    var.slack_signing_secret_arn,
     var.outlook_client_secret_secret_arn
   ]
 }
@@ -168,7 +168,7 @@ export const getSecret = async (secretArn: string): Promise<string> => {
 
 ```hcl
 slack_bot_token_secret_arn             = "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:slack-bot-token-xxxx"
-slack_signing_secret_secret_arn        = "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:slack-signing-secret-xxxx"
+slack_signing_secret_arn               = "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:slack-signing-secret-xxxx"
 outlook_client_secret_secret_arn       = "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:outlook-client-secret-xxxx"
 ```
 
