@@ -8,79 +8,107 @@
         {
           "Variable": "$.action",
           "StringEquals": "start",
-          "Next": "StartEC2"
+          "Next": "ParallelStart"
         },
         {
           "Variable": "$.action",
           "StringEquals": "stop",
-          "Next": "StopRDS"
+          "Next": "ParallelStop"
         }
       ],
       "Default": "NotifyError"
     },
 
-    "StartEC2": {
-      "Type": "Task",
-      "Resource": "${ResourceOperatorArn}",
-      "Parameters": {
-        "operation": "start_ec2",
-        "ec2InstanceIds.$": "$.ec2InstanceIds",
-        "rdsInstanceId.$": "$.rdsInstanceId",
-        "action.$": "$.action",
-        "environment.$": "$.environment",
-        "userId.$": "$.userId"
-      },
-      "ResultPath": "$.operationResult",
-      "Next": "WaitEC2Start",
-      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "HandleError" }]
-    },
-    "WaitEC2Start": {
-      "Type": "Wait",
-      "Seconds": 30,
-      "Next": "CheckEC2Running"
-    },
-    "CheckEC2Running": {
-      "Type": "Task",
-      "Resource": "${ResourceOperatorArn}",
-      "Parameters": {
-        "operation": "check_ec2",
-        "ec2InstanceIds.$": "$.ec2InstanceIds",
-        "rdsInstanceId.$": "$.rdsInstanceId",
-        "action": "start",
-        "environment.$": "$.environment",
-        "userId.$": "$.userId"
-      },
-      "ResultPath": "$.checkResult",
-      "Next": "IsEC2Running",
-      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "HandleError" }]
-    },
-    "IsEC2Running": {
-      "Type": "Choice",
-      "Choices": [
+    "ParallelStart": {
+      "Type": "Parallel",
+      "Branches": [
         {
-          "Variable": "$.checkResult.ready",
-          "BooleanEquals": true,
-          "Next": "StartRDS"
+          "StartAt": "StartEC2InParallel",
+          "States": {
+            "StartEC2InParallel": {
+              "Type": "Task",
+              "Resource": "${ResourceOperatorArn}",
+              "Parameters": {
+                "operation": "start_ec2",
+                "ec2InstanceIds.$": "$.ec2InstanceIds",
+                "rdsInstanceId.$": "$.rdsInstanceId",
+                "action.$": "$.action",
+                "environment.$": "$.environment",
+                "userId.$": "$.userId"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "StartRDSInParallel",
+          "States": {
+            "StartRDSInParallel": {
+              "Type": "Task",
+              "Resource": "${ResourceOperatorArn}",
+              "Parameters": {
+                "operation": "start_rds",
+                "ec2InstanceIds.$": "$.ec2InstanceIds",
+                "rdsInstanceId.$": "$.rdsInstanceId",
+                "action.$": "$.action",
+                "environment.$": "$.environment",
+                "userId.$": "$.userId"
+              },
+              "End": true
+            }
+          }
         }
       ],
-      "Default": "WaitEC2Start"
-    },
-
-    "StartRDS": {
-      "Type": "Task",
-      "Resource": "${ResourceOperatorArn}",
-      "Parameters": {
-        "operation": "start_rds",
-        "ec2InstanceIds.$": "$.ec2InstanceIds",
-        "rdsInstanceId.$": "$.rdsInstanceId",
-        "action.$": "$.action",
-        "environment.$": "$.environment",
-        "userId.$": "$.userId"
-      },
-      "ResultPath": "$.operationResult",
+      "ResultPath": "$.parallelResult",
       "Next": "WaitRDSStart",
       "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "HandleError" }]
     },
+
+    "ParallelStop": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "StopEC2InParallel",
+          "States": {
+            "StopEC2InParallel": {
+              "Type": "Task",
+              "Resource": "${ResourceOperatorArn}",
+              "Parameters": {
+                "operation": "stop_ec2",
+                "ec2InstanceIds.$": "$.ec2InstanceIds",
+                "rdsInstanceId.$": "$.rdsInstanceId",
+                "action.$": "$.action",
+                "environment.$": "$.environment",
+                "userId.$": "$.userId"
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "StopRDSInParallel",
+          "States": {
+            "StopRDSInParallel": {
+              "Type": "Task",
+              "Resource": "${ResourceOperatorArn}",
+              "Parameters": {
+                "operation": "stop_rds",
+                "ec2InstanceIds.$": "$.ec2InstanceIds",
+                "rdsInstanceId.$": "$.rdsInstanceId",
+                "action.$": "$.action",
+                "environment.$": "$.environment",
+                "userId.$": "$.userId"
+              },
+              "End": true
+            }
+          }
+        }
+      ],
+      "ResultPath": "$.parallelResult",
+      "Next": "WaitRDSStop",
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "HandleError" }]
+    },
+
     "WaitRDSStart": {
       "Type": "Wait",
       "Seconds": 60,
@@ -113,21 +141,6 @@
       "Default": "WaitRDSStart"
     },
 
-    "StopRDS": {
-      "Type": "Task",
-      "Resource": "${ResourceOperatorArn}",
-      "Parameters": {
-        "operation": "stop_rds",
-        "ec2InstanceIds.$": "$.ec2InstanceIds",
-        "rdsInstanceId.$": "$.rdsInstanceId",
-        "action.$": "$.action",
-        "environment.$": "$.environment",
-        "userId.$": "$.userId"
-      },
-      "ResultPath": "$.operationResult",
-      "Next": "WaitRDSStop",
-      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "HandleError" }]
-    },
     "WaitRDSStop": {
       "Type": "Wait",
       "Seconds": 60,
@@ -154,57 +167,10 @@
         {
           "Variable": "$.checkResult.ready",
           "BooleanEquals": true,
-          "Next": "StopEC2"
-        }
-      ],
-      "Default": "WaitRDSStop"
-    },
-
-    "StopEC2": {
-      "Type": "Task",
-      "Resource": "${ResourceOperatorArn}",
-      "Parameters": {
-        "operation": "stop_ec2",
-        "ec2InstanceIds.$": "$.ec2InstanceIds",
-        "rdsInstanceId.$": "$.rdsInstanceId",
-        "action.$": "$.action",
-        "environment.$": "$.environment",
-        "userId.$": "$.userId"
-      },
-      "ResultPath": "$.operationResult",
-      "Next": "WaitEC2Stop",
-      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "HandleError" }]
-    },
-    "WaitEC2Stop": {
-      "Type": "Wait",
-      "Seconds": 30,
-      "Next": "CheckEC2Stopped"
-    },
-    "CheckEC2Stopped": {
-      "Type": "Task",
-      "Resource": "${ResourceOperatorArn}",
-      "Parameters": {
-        "operation": "check_ec2",
-        "ec2InstanceIds.$": "$.ec2InstanceIds",
-        "rdsInstanceId.$": "$.rdsInstanceId",
-        "action": "stop",
-        "environment.$": "$.environment",
-        "userId.$": "$.userId"
-      },
-      "ResultPath": "$.checkResult",
-      "Next": "IsEC2Stopped",
-      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "HandleError" }]
-    },
-    "IsEC2Stopped": {
-      "Type": "Choice",
-      "Choices": [
-        {
-          "Variable": "$.checkResult.ready",
-          "BooleanEquals": true,
           "Next": "NotifyComplete"
         }
       ],
-      "Default": "WaitEC2Stop"
+      "Default": "WaitRDSStop"
     },
 
     "NotifyComplete": {
