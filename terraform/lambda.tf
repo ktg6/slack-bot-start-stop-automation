@@ -14,7 +14,7 @@ resource "aws_lambda_function" "slack_handler" {
   function_name = "${var.project_name}-slack-handler"
   role          = aws_iam_role.slack_handler.arn
   handler       = "slack-handler/index.handler"
-  runtime       = "nodejs20.x"
+  runtime       = "nodejs24.x"
   timeout       = 30
   memory_size   = 256
 
@@ -48,7 +48,7 @@ resource "aws_lambda_function" "resource_operator" {
   function_name = "${var.project_name}-resource-operator"
   role          = aws_iam_role.resource_operator.arn
   handler       = "resource-operator/index.handler"
-  runtime       = "nodejs20.x"
+  runtime       = "nodejs24.x"
   timeout       = 120
   memory_size   = 256
 
@@ -73,7 +73,7 @@ resource "aws_lambda_function" "outlook_sync" {
   function_name = "${var.project_name}-outlook-sync"
   role          = aws_iam_role.outlook_sync.arn
   handler       = "outlook-sync/index.handler"
-  runtime       = "nodejs20.x"
+  runtime       = "nodejs24.x"
   timeout       = 120
   memory_size   = 256
 
@@ -106,7 +106,7 @@ resource "aws_lambda_function" "sfn_trigger" {
   function_name = "${var.project_name}-sfn-trigger"
   role          = aws_iam_role.sfn_trigger.arn
   handler       = "sfn-trigger/index.handler"
-  runtime       = "nodejs20.x"
+  runtime       = "nodejs24.x"
   timeout       = 10
   memory_size   = 128
 
