@@ -9,7 +9,10 @@ import {
   SecretsManagerClient,
   GetSecretValueCommand,
 } from "@aws-sdk/client-secrets-manager";
-import type { AwsEvent } from "@slack/bolt/dist/receivers/AwsLambdaReceiver";
+import type {
+  AwsEvent,
+  AwsHandler,
+} from "@slack/bolt/dist/receivers/AwsLambdaReceiver";
 
 const sfn = new SFNClient({});
 const ssm = new SSMClient({});
@@ -20,9 +23,7 @@ const slackChannelId = process.env.SLACK_CHANNEL_ID ?? "";
 const slackBotTokenSecretArn = process.env.SLACK_BOT_TOKEN_SECRET_ARN ?? "";
 const slackSigningSecretSecretArn = process.env.SLACK_SIGNING_SECRET_ARN ?? "";
 
-let lambdaHandlerPromise: Promise<
-  (event: AwsEvent, context: unknown, callback: unknown) => Promise<unknown>
-> | null = null;
+let lambdaHandlerPromise: Promise<AwsHandler> | null = null;
 
 // 環境リスト
 const ENVIRONMENTS = [
@@ -166,9 +167,7 @@ const registerHandlers = (app: App): void => {
   app.action<BlockAction>("environment_select", async ({ ack }) => { await ack(); });
 };
 
-const getLambdaHandler = async (): Promise<
-  (event: AwsEvent, context: unknown, callback: unknown) => Promise<unknown>
-> => {
+const getLambdaHandler = async (): Promise<AwsHandler> => {
   if (lambdaHandlerPromise) return lambdaHandlerPromise;
 
   lambdaHandlerPromise = (async () => {
@@ -191,11 +190,7 @@ const getLambdaHandler = async (): Promise<
 };
 
 // Lambda handler
-export const handler = async (
-  event: AwsEvent,
-  context: unknown,
-  callback: unknown
-) => {
+export const handler: AwsHandler = async (event, context, callback) => {
   const lambdaHandler = await getLambdaHandler();
-  return lambdaHandler(event, context as never, callback as never);
+  return lambdaHandler(event, context, callback);
 };

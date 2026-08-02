@@ -321,8 +321,10 @@ const notifyTodaySchedule = async (rules: ScheduleRule[]): Promise<void> => {
 
 // メインハンドラ
 export const handler = async (): Promise<{ statusCode: number; body: string }> => {
+  let slack: WebClient | null = null;
+
   try {
-    const slack = await getSlackClient();
+    slack = await getSlackClient();
 
     // 1. Outlookカレンダーからイベント取得
     const accessToken = await getAccessToken();
@@ -373,10 +375,12 @@ export const handler = async (): Promise<{ statusCode: number; body: string }> =
   } catch (err: unknown) {
     console.error("Outlook sync failed:", err);
 
-    await slack.chat.postMessage({
-      channel: slackChannelId,
-      text: `:x: *Outlook同期でエラーが発生しました*\n${err instanceof Error ? err.message : String(err)}`,
-    });
+    if (slack) {
+      await slack.chat.postMessage({
+        channel: slackChannelId,
+        text: `:x: *Outlook同期でエラーが発生しました*\n${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
 
     return {
       statusCode: 500,
