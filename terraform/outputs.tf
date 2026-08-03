@@ -10,7 +10,7 @@ output "ec2_instance_id" {
 
 output "rds_instance_id" {
   description = "デモ用RDSインスタンスID"
-  value       = aws_db_instance.demo.identifier
+  value       = var.create_demo_rds ? aws_db_instance.demo[0].identifier : null
 }
 
 output "step_functions_arn" {
@@ -25,5 +25,5 @@ output "outlook_sync_lambda_arn" {
 
 output "rds_master_user_secret_arn" {
   description = "RDSマスターパスワードが格納されたSecrets Manager ARN（パスワード確認時に使用）"
-  value       = aws_db_instance.demo.master_user_secret[0].secret_arn
+  value       = var.create_demo_rds ? aws_db_instance.demo[0].master_user_secret[0].secret_arn : null
 }

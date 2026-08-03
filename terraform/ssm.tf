@@ -11,7 +11,7 @@ resource "aws_ssm_parameter" "dev_ec2_instance_ids" {
 resource "aws_ssm_parameter" "dev_rds_instance_id" {
   name  = "/start-stop/dev/rds-instance-id"
   type  = "String"
-  value = aws_db_instance.demo.identifier
+  value = var.create_demo_rds ? aws_db_instance.demo[0].identifier : ""
 }
 
 # staging環境のEC2/RDSインスタンスID

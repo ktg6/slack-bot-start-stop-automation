@@ -92,6 +92,7 @@ resource "aws_security_group" "ec2" {
 }
 
 resource "aws_security_group" "rds" {
+  count      = var.create_demo_rds ? 1 : 0
   name_prefix = "${var.project_name}-rds-"
   vpc_id      = aws_vpc.main.id
 
@@ -117,6 +118,7 @@ resource "aws_instance" "demo" {
 
 # ---------- RDS (デモ用) ----------
 resource "aws_db_subnet_group" "main" {
+  count      = var.create_demo_rds ? 1 : 0
   name       = "${var.project_name}-db-subnet"
   subnet_ids = [aws_subnet.private_a.id, aws_subnet.private_c.id]
 
@@ -124,6 +126,7 @@ resource "aws_db_subnet_group" "main" {
 }
 
 resource "aws_db_instance" "demo" {
+  count                  = var.create_demo_rds ? 1 : 0
   identifier             = "${var.project_name}-demo-rds"
   engine                 = "mysql"
   engine_version         = "8.0"
@@ -133,8 +136,8 @@ resource "aws_db_instance" "demo" {
   username               = var.rds_master_username
   # パスワードはAWSが自動生成してSecrets Managerで管理（Terraformに渡す必要なし）
   manage_master_user_password = true
-  db_subnet_group_name   = aws_db_subnet_group.main.name
-  vpc_security_group_ids = [aws_security_group.rds.id]
+  db_subnet_group_name   = aws_db_subnet_group.main[0].name
+  vpc_security_group_ids = [aws_security_group.rds[0].id]
   skip_final_snapshot    = true
   publicly_accessible    = false
 

@@ -119,6 +119,12 @@ variable "rds_instance_class" {
   default     = "db.t3.micro"
 }
 
+variable "create_demo_rds" {
+  description = "Whether to create the demo RDS instance"
+  type        = bool
+  default     = true
+}
+
 variable "rds_master_username" {
   description = "RDS master username"
   type        = string
