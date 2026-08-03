@@ -15,12 +15,14 @@ variable "slack_bot_token" {
   description = "Slack Bot Token (xoxb-...)"
   type        = string
   sensitive   = true
+  default     = ""
 }
 
 variable "slack_signing_secret" {
   description = "Slack Signing Secret"
   type        = string
   sensitive   = true
+  default     = ""
 }
 
 variable "slack_channel_id" {
@@ -48,10 +50,54 @@ variable "outlook_client_secret" {
   default     = ""
 }
 
+# Secrets Manager ARN (推奨)
+variable "slack_bot_token_secret_arn" {
+  description = "Secrets Manager ARN for Slack bot token"
+  type        = string
+  default     = ""
+}
+
+variable "slack_signing_secret_arn" {
+  description = "Secrets Manager ARN for Slack signing secret"
+  type        = string
+  default     = ""
+}
+
+variable "outlook_client_secret_secret_arn" {
+  description = "Secrets Manager ARN for Outlook client secret"
+  type        = string
+  default     = ""
+}
+
 variable "outlook_calendar_email" {
   description = "Outlook calendar email address to read events from"
   type        = string
   default     = ""
+}
+
+# staging/prod 環境のリソースID（本番運用時は tfvars で上書き）
+variable "staging_ec2_instance_ids" {
+  description = "staging環境のEC2インスタンスID（カンマ区切り）"
+  type        = string
+  default     = "placeholder"
+}
+
+variable "staging_rds_instance_id" {
+  description = "staging環境のRDSインスタンスID"
+  type        = string
+  default     = "placeholder"
+}
+
+variable "prod_ec2_instance_ids" {
+  description = "prod環境のEC2インスタンスID（カンマ区切り）"
+  type        = string
+  default     = "placeholder"
+}
+
+variable "prod_rds_instance_id" {
+  description = "prod環境のRDSインスタンスID"
+  type        = string
+  default     = "placeholder"
 }
 
 # デモ用EC2/RDS設定
@@ -73,14 +119,14 @@ variable "rds_instance_class" {
   default     = "db.t3.micro"
 }
 
+variable "create_demo_rds" {
+  description = "Whether to create the demo RDS instance"
+  type        = bool
+  default     = true
+}
+
 variable "rds_master_username" {
   description = "RDS master username"
   type        = string
   default     = "admin"
-}
-
-variable "rds_master_password" {
-  description = "RDS master password"
-  type        = string
-  sensitive   = true
 }

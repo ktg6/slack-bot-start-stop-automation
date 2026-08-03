@@ -1,8 +1,8 @@
-# ---------- Outlook同期用スケジュール (1時間毎) ----------
+# ---------- Outlook同期用スケジュール (JST 0時・12時) ----------
 resource "aws_cloudwatch_event_rule" "outlook_sync" {
   name                = "${var.project_name}-outlook-sync"
-  description         = "Trigger Outlook calendar sync every hour"
-  schedule_expression = "rate(1 hour)"
+  description         = "Trigger Outlook calendar sync at 00:00 and 12:00 JST (03:00 and 15:00 UTC)"
+  schedule_expression = "cron(0 3,15 * * ? *)"
 }
 
 resource "aws_cloudwatch_event_target" "outlook_sync" {

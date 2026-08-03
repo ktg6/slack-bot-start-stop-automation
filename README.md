@@ -65,7 +65,7 @@ EventBridge (1h毎) ──▶ outlook-sync Lambda
 ```bash
 # 1. Lambda ビルド
 cd lambdas
-npm install
+npm ci --ignore-scripts   # package-lock.json から確定的にインストール
 npm run build
 
 # 2. Lambdaパッケージ作成
@@ -74,23 +74,37 @@ npm run package
 # 3. Terraform実行
 cd ../terraform
 
+# backend.hcl.example をコピーして backend.hcl を作成
+cp backend.hcl.example backend.hcl
+# backend.hcl の bucket / kms_key_id などを実環境の値に修正
+
 # terraform.tfvars を作成
 cat > terraform.tfvars <<EOF
-slack_bot_token      = "xoxb-your-token"
-slack_signing_secret = "your-signing-secret"
 slack_channel_id     = "C0XXXXXXXXX"
-rds_master_password  = "your-secure-password"
+
+# 推奨: Secrets Manager ARNを指定（値そのものは渡さない）
+slack_bot_token_secret_arn          = "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:slack-bot-token-xxxx"
+slack_signing_secret_arn            = "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:slack-signing-secret-xxxx"
 
 # Outlook連携（任意）
 outlook_tenant_id      = ""
 outlook_client_id      = ""
-outlook_client_secret  = ""
 outlook_calendar_email = ""
+outlook_client_secret_secret_arn = ""
+
+# 互換用（段階移行時のみ）
+# slack_bot_token      = "xoxb-your-token"
+# slack_signing_secret = "your-signing-secret"
+# outlook_client_secret  = ""
 EOF
 
-terraform init
+terraform init -reconfigure -backend-config=backend.hcl
 terraform plan
 terraform apply
+
+# RDSマスターパスワードはAWSが自動生成し、
+# Secrets Managerに保存される（手入力不要）
+terraform output rds_master_user_secret_arn
 
 # 4. Lambda関数のコード更新
 aws lambda update-function-code \

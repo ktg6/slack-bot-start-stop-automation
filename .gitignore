@@ -1,6 +1,7 @@
 node_modules/
 dist/
 *.zip
+# Note: lambdas/package-lock.json はコミット対象（npm ci による再現性確保のため削除しないこと）
 .DS_Store
 
 # Terraform
@@ -8,6 +9,7 @@ terraform/.terraform/
 terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/*.tfvars
+terraform/backend.hcl
 terraform/dummy.zip
 terraform/.terraform.lock.hcl
 
@@ -15,3 +17,13 @@ terraform/.terraform.lock.hcl
 .idea/
 .vscode/
 *.swp
+
+# Secret, env
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# Claude Code settings
+.claude/settings.local.json

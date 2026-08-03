@@ -13,24 +13,30 @@ import {
   RemovePermissionCommand,
 } from "@aws-sdk/client-lambda";
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
+import {
+  SecretsManagerClient,
+  GetSecretValueCommand,
+} from "@aws-sdk/client-secrets-manager";
 import { WebClient } from "@slack/web-api";
 
 const eventbridge = new EventBridgeClient({});
 const lambda = new LambdaClient({});
 const ssm = new SSMClient({});
+const secrets = new SecretsManagerClient({});
 
 const stepFunctionsArn = process.env.STEP_FUNCTIONS_ARN ?? "";
-const slackToken = process.env.SLACK_BOT_TOKEN ?? "";
 const slackChannelId = process.env.SLACK_CHANNEL_ID ?? "";
 const tenantId = process.env.OUTLOOK_TENANT_ID ?? "";
 const clientId = process.env.OUTLOOK_CLIENT_ID ?? "";
-const clientSecret = process.env.OUTLOOK_CLIENT_SECRET ?? "";
 const calendarEmail = process.env.OUTLOOK_CALENDAR_EMAIL ?? "";
 const sfnTriggerLambdaArn = process.env.SFN_TRIGGER_LAMBDA_ARN ?? "";
+const slackBotTokenSecretArn = process.env.SLACK_BOT_TOKEN_SECRET_ARN ?? "";
+const outlookClientSecretSecretArn = process.env.OUTLOOK_CLIENT_SECRET_SECRET_ARN ?? "";
 const rulePrefix = "start-stop-";
 const maxRules = parseInt(process.env.MAX_RULES ?? "40", 10);
 
-const slack = new WebClient(slackToken);
+let slackClientPromise: Promise<WebClient> | null = null;
+let outlookClientSecretPromise: Promise<string> | null = null;
 
 // 環境名とリソースIDのマッピング用
 const ENVIRONMENTS = ["dev", "staging", "prod"];
@@ -50,8 +56,39 @@ interface ScheduleRule {
   scheduledTime: Date;
 }
 
+const getSecret = async (secretArn: string): Promise<string> => {
+  if (!secretArn) return "";
+  const result = await secrets.send(
+    new GetSecretValueCommand({ SecretId: secretArn })
+  );
+  return result.SecretString ?? "";
+};
+
+const getSlackClient = async (): Promise<WebClient> => {
+  if (slackClientPromise) return slackClientPromise;
+  slackClientPromise = (async () => {
+    const secretToken = await getSecret(slackBotTokenSecretArn);
+    const slackToken = secretToken || (process.env.SLACK_BOT_TOKEN ?? "");
+    if (!slackToken) {
+      throw new Error("Slack bot token is not configured");
+    }
+    return new WebClient(slackToken);
+  })();
+  return slackClientPromise;
+};
+
+const getOutlookClientSecret = async (): Promise<string> => {
+  if (outlookClientSecretPromise) return outlookClientSecretPromise;
+  outlookClientSecretPromise = (async () => {
+    const secretValue = await getSecret(outlookClientSecretSecretArn);
+    return secretValue || (process.env.OUTLOOK_CLIENT_SECRET ?? "");
+  })();
+  return outlookClientSecretPromise;
+};
+
 // OAuth 2.0 Client Credentials Flow でトークン取得
 const getAccessToken = async (): Promise<string> => {
+  const clientSecret = await getOutlookClientSecret();
   const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
   const params = new URLSearchParams({
     client_id: clientId,
@@ -260,6 +297,7 @@ const getExistingRules = async (): Promise<string[]> => {
 
 // 当日の予定をSlack通知
 const notifyTodaySchedule = async (rules: ScheduleRule[]): Promise<void> => {
+  const slack = await getSlackClient();
   const now = new Date();
   const todayRules = rules.filter((r) => {
     const diff = r.scheduledTime.getTime() - now.getTime();
@@ -281,9 +319,32 @@ const notifyTodaySchedule = async (rules: ScheduleRule[]): Promise<void> => {
   });
 };
 
+// Outlook予定の追加・削除をSlack通知
+const notifyScheduleChanges = async (
+  created: ScheduleRule[],
+  deleted: string[],
+): Promise<void> => {
+  if (created.length === 0 && deleted.length === 0) return;
+
+  const slack = await getSlackClient();
+  const lines = [
+    ...created.map((rule) => `- :heavy_plus_sign: 追加 ${rule.name}`),
+    ...deleted.map((name) => `- :wastebasket: 削除 ${name}`),
+  ];
+
+  await slack.chat.postMessage({
+    channel: slackChannelId,
+    text: `:calendar: *起動停止予定を更新しました*\n${lines.join("\n")}`,
+  });
+};
+
 // メインハンドラ
 export const handler = async (): Promise<{ statusCode: number; body: string }> => {
+  let slack: WebClient | null = null;
+
   try {
+    slack = await getSlackClient();
+
     // 1. Outlookカレンダーからイベント取得
     const accessToken = await getAccessToken();
     const events = await getCalendarEvents(accessToken);
@@ -316,7 +377,10 @@ export const handler = async (): Promise<{ statusCode: number; body: string }> =
       console.log(`Created rule: ${rule.name}`);
     }
 
-    // 4. 当日の予定をSlack通知（毎朝9時台の実行時のみ）
+    // 4. Outlook予定の変更を通知
+    await notifyScheduleChanges(toCreate.map((r) => r), toDelete);
+
+    // 5. 当日の予定をSlack通知（毎朝9時台の実行時のみ）
     const jstHour = (new Date().getUTCHours() + 9) % 24;
     if (jstHour === 9) {
       await notifyTodaySchedule(desiredRules);
@@ -332,11 +396,6 @@ export const handler = async (): Promise<{ statusCode: number; body: string }> =
     };
   } catch (err: unknown) {
     console.error("Outlook sync failed:", err);
-
-    await slack.chat.postMessage({
-      channel: slackChannelId,
-      text: `:x: *Outlook同期でエラーが発生しました*\n${err instanceof Error ? err.message : String(err)}`,
-    });
 
     return {
       statusCode: 500,

@@ -10,14 +10,19 @@ import {
   StopDBInstanceCommand,
   DescribeDBInstancesCommand,
 } from "@aws-sdk/client-rds";
+import {
+  SecretsManagerClient,
+  GetSecretValueCommand,
+} from "@aws-sdk/client-secrets-manager";
 import { WebClient } from "@slack/web-api";
 
 const ec2 = new EC2Client({});
 const rds = new RDSClient({});
+const secrets = new SecretsManagerClient({});
 
-const slackToken = process.env.SLACK_BOT_TOKEN ?? "";
 const slackChannelId = process.env.SLACK_CHANNEL_ID ?? "";
-const slack = new WebClient(slackToken);
+const slackBotTokenSecretArn = process.env.SLACK_BOT_TOKEN_SECRET_ARN ?? "";
+let slackClientPromise: Promise<WebClient> | null = null;
 
 // Step Functionsから渡されるイベント型
 interface OperationEvent {
@@ -76,12 +81,34 @@ const checkRdsStatus = async (instanceId: string, targetStatus: string): Promise
   return dbInstance?.DBInstanceStatus === targetStatus;
 };
 
+const getSecret = async (secretArn: string): Promise<string> => {
+  if (!secretArn) return "";
+  const result = await secrets.send(
+    new GetSecretValueCommand({ SecretId: secretArn })
+  );
+  return result.SecretString ?? "";
+};
+
+const getSlackClient = async (): Promise<WebClient> => {
+  if (slackClientPromise) return slackClientPromise;
+  slackClientPromise = (async () => {
+    const secretToken = await getSecret(slackBotTokenSecretArn);
+    const slackToken = secretToken || (process.env.SLACK_BOT_TOKEN ?? "");
+    if (!slackToken) {
+      throw new Error("Slack bot token is not configured");
+    }
+    return new WebClient(slackToken);
+  })();
+  return slackClientPromise;
+};
+
 const notifySlack = async (
   environment: string,
   action: string,
   userId: string,
   error?: string
 ): Promise<void> => {
+  const slack = await getSlackClient();
   const status = error ? `:x: エラー` : `:white_check_mark: 完了`;
   const actionLabel = action === "start" ? "起動" : "停止";
   const text = error
