@@ -319,6 +319,25 @@ const notifyTodaySchedule = async (rules: ScheduleRule[]): Promise<void> => {
   });
 };
 
+// Outlook予定の追加・削除をSlack通知
+const notifyScheduleChanges = async (
+  created: ScheduleRule[],
+  deleted: string[],
+): Promise<void> => {
+  if (created.length === 0 && deleted.length === 0) return;
+
+  const slack = await getSlackClient();
+  const lines = [
+    ...created.map((rule) => `- :heavy_plus_sign: 追加 ${rule.name}`),
+    ...deleted.map((name) => `- :wastebasket: 削除 ${name}`),
+  ];
+
+  await slack.chat.postMessage({
+    channel: slackChannelId,
+    text: `:calendar: *起動停止予定を更新しました*\n${lines.join("\n")}`,
+  });
+};
+
 // メインハンドラ
 export const handler = async (): Promise<{ statusCode: number; body: string }> => {
   let slack: WebClient | null = null;
@@ -358,7 +377,10 @@ export const handler = async (): Promise<{ statusCode: number; body: string }> =
       console.log(`Created rule: ${rule.name}`);
     }
 
-    // 4. 当日の予定をSlack通知（毎朝9時台の実行時のみ）
+    // 4. Outlook予定の変更を通知
+    await notifyScheduleChanges(toCreate.map((r) => r), toDelete);
+
+    // 5. 当日の予定をSlack通知（毎朝9時台の実行時のみ）
     const jstHour = (new Date().getUTCHours() + 9) % 24;
     if (jstHour === 9) {
       await notifyTodaySchedule(desiredRules);
@@ -374,13 +396,6 @@ export const handler = async (): Promise<{ statusCode: number; body: string }> =
     };
   } catch (err: unknown) {
     console.error("Outlook sync failed:", err);
-
-    if (slack) {
-      await slack.chat.postMessage({
-        channel: slackChannelId,
-        text: `:x: *Outlook同期でエラーが発生しました*\n${err instanceof Error ? err.message : String(err)}`,
-      });
-    }
 
     return {
       statusCode: 500,
