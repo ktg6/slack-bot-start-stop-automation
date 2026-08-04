@@ -189,8 +189,19 @@ const getLambdaHandler = async (): Promise<AwsHandler> => {
   return lambdaHandlerPromise;
 };
 
-// Lambda handler
-export const handler: AwsHandler = async (event, context, callback) => {
+// Lambda handler (Node.js 24ではcallback形式を公開しない)
+export const handler = async (
+  event: Parameters<AwsHandler>[0],
+  context: Parameters<AwsHandler>[1],
+) => {
   const lambdaHandler = await getLambdaHandler();
-  return lambdaHandler(event, context, callback);
+  return new Promise((resolve, reject) => {
+    lambdaHandler(event, context, (error, response) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(response);
+    });
+  });
 };
