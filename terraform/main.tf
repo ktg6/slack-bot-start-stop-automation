@@ -129,7 +129,7 @@ resource "aws_db_instance" "demo" {
   count                  = var.create_demo_rds ? 1 : 0
   identifier             = "${var.project_name}-demo-rds"
   engine                 = "mysql"
-  engine_version         = "8.0"
+  engine_version         = "8.4"
   instance_class         = var.rds_instance_class
   allocated_storage      = 20
   db_name                = "demo"
