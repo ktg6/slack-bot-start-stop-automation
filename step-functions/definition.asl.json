@@ -8,13 +8,36 @@
         {
           "Variable": "$.action",
           "StringEquals": "start",
-          "Next": "ParallelStart"
+          "Next": "NotifyStarted"
         },
         {
           "Variable": "$.action",
           "StringEquals": "stop",
-          "Next": "ParallelStop"
+          "Next": "NotifyStarted"
         }
+      ],
+      "Default": "NotifyError"
+    },
+
+    "NotifyStarted": {
+      "Type": "Task",
+      "Resource": "${ResourceOperatorArn}",
+      "Parameters": {
+        "operation": "notify_start",
+        "ec2InstanceIds.$": "$.ec2InstanceIds",
+        "rdsInstanceId.$": "$.rdsInstanceId",
+        "action.$": "$.action",
+        "environment.$": "$.environment",
+        "userId.$": "$.userId"
+      },
+      "Next": "RouteAction",
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "HandleError" }]
+    },
+    "RouteAction": {
+      "Type": "Choice",
+      "Choices": [
+        { "Variable": "$.action", "StringEquals": "start", "Next": "ParallelStart" },
+        { "Variable": "$.action", "StringEquals": "stop", "Next": "ParallelStop" }
       ],
       "Default": "NotifyError"
     },

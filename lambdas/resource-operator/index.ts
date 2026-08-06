@@ -26,7 +26,7 @@ let slackClientPromise: Promise<WebClient> | null = null;
 
 // Step Functionsから渡されるイベント型
 interface OperationEvent {
-  operation: "start_ec2" | "stop_ec2" | "start_rds" | "stop_rds" | "check_ec2" | "check_rds" | "notify";
+  operation: "start_ec2" | "stop_ec2" | "start_rds" | "stop_rds" | "check_ec2" | "check_rds" | "notify" | "notify_start";
   ec2InstanceIds: string[];
   rdsInstanceId: string;
   action: "start" | "stop";
@@ -127,6 +127,15 @@ const notifySlack = async (
   });
 };
 
+const notifyStartSlack = async (environment: string, action: string, userId: string): Promise<void> => {
+  const slack = await getSlackClient();
+  const actionLabel = action === "start" ? "起動" : "停止";
+  await slack.chat.postMessage({
+    channel: slackChannelId,
+    text: `:hourglass_flowing_sand: *[${environment}] ${actionLabel}処理を開始しました*\n実行者: <@${userId}>`,
+  });
+};
+
 export const handler = async (event: OperationEvent): Promise<OperationResult> => {
   const { operation, ec2InstanceIds, rdsInstanceId, action, environment, userId } = event;
 
@@ -141,6 +150,10 @@ export const handler = async (event: OperationEvent): Promise<OperationResult> =
   };
 
   switch (operation) {
+    case "notify_start": {
+      await notifyStartSlack(environment, action, userId);
+      return { ...baseResult, status: "start-notified", ready: true };
+    }
     case "start_ec2": {
       const status = await startEc2(ec2InstanceIds);
       return { ...baseResult, status };

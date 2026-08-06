@@ -1,18 +1,11 @@
-import {
-  App,
-  AwsLambdaReceiver,
-  BlockAction,
-} from "@slack/bolt";
+import { App, BlockAction, verifySlackRequest } from "@slack/bolt";
 import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import {
   SecretsManagerClient,
   GetSecretValueCommand,
 } from "@aws-sdk/client-secrets-manager";
-import type {
-  AwsEvent,
-  AwsHandler,
-} from "@slack/bolt/dist/receivers/AwsLambdaReceiver";
+import type { APIGatewayProxyEventV2, Context } from "aws-lambda";
 
 const sfn = new SFNClient({});
 const ssm = new SSMClient({});
@@ -23,7 +16,7 @@ const slackChannelId = process.env.SLACK_CHANNEL_ID ?? "";
 const slackBotTokenSecretArn = process.env.SLACK_BOT_TOKEN_SECRET_ARN ?? "";
 const slackSigningSecretSecretArn = process.env.SLACK_SIGNING_SECRET_ARN ?? "";
 
-let lambdaHandlerPromise: Promise<AwsHandler> | null = null;
+let appPromise: Promise<{ app: App; signingSecret: string }> | null = null;
 
 // 環境リスト
 const ENVIRONMENTS = [
@@ -51,6 +44,14 @@ const getSecret = async (secretArn: string): Promise<string> => {
 const registerHandlers = (app: App): void => {
   // /start-stop コマンド: モーダルを表示
   app.command("/start-stop", async ({ ack, body, client }) => {
+    if (body.channel_id !== slackChannelId) {
+      await ack({
+        response_type: "ephemeral",
+        text: "このチャンネルでは実行できません。",
+      });
+      return;
+    }
+
     await ack();
 
     await client.views.open({
@@ -72,11 +73,11 @@ const registerHandlers = (app: App): void => {
               placeholder: { type: "plain_text", text: "選択してください" },
               options: [
                 {
-                  text: { type: "plain_text", text: ":arrow_forward: 起動" },
+                  text: { type: "plain_text", text: "▶️ 起動" },
                   value: "start",
                 },
                 {
-                  text: { type: "plain_text", text: ":stop_button: 停止" },
+                  text: { type: "plain_text", text: "⏹️ 停止" },
                   value: "stop",
                 },
               ],
@@ -128,11 +129,7 @@ const registerHandlers = (app: App): void => {
       return;
     }
 
-    await ack();
-
     const userId = body.user.id;
-    const actionLabel = actionValue === "start" ? "起動" : "停止";
-
     // SSM Parameter Storeから対象リソース情報取得
     const [ec2InstanceIdsRaw, rdsInstanceId] = await Promise.all([
       getParameter(`/start-stop/${environmentValue}/ec2-instance-ids`),
@@ -155,11 +152,16 @@ const registerHandlers = (app: App): void => {
       })
     );
 
-    // 即時応答
-    await client.chat.postMessage({
-      channel: slackChannelId,
-      text: `<@${userId}> が *${environmentValue}* 環境の *${actionLabel}* 処理を開始しました :rocket:`,
+    console.log("Step Functions execution started", {
+      action: actionValue,
+      environment: environmentValue,
+      userId,
     });
+
+    // Step Functionsの起動完了後にSlackへ受付成功を返す。
+    // ack後に非同期処理を残すと、Lambda終了時に処理が中断される可能性がある。
+    await ack();
+
   });
 
   // Slack Block Actionハンドラ（モーダル内のselect操作を受け取るため）
@@ -167,10 +169,10 @@ const registerHandlers = (app: App): void => {
   app.action<BlockAction>("environment_select", async ({ ack }) => { await ack(); });
 };
 
-const getLambdaHandler = async (): Promise<AwsHandler> => {
-  if (lambdaHandlerPromise) return lambdaHandlerPromise;
+const getApp = async (): Promise<{ app: App; signingSecret: string }> => {
+  if (appPromise) return appPromise;
 
-  lambdaHandlerPromise = (async () => {
+  appPromise = (async () => {
     const secretToken = await getSecret(slackBotTokenSecretArn);
     const secretSigningSecret = await getSecret(slackSigningSecretSecretArn);
     const botToken = secretToken || (process.env.SLACK_BOT_TOKEN ?? "");
@@ -180,28 +182,76 @@ const getLambdaHandler = async (): Promise<AwsHandler> => {
       throw new Error("Slack token/signing secret is not configured");
     }
 
-    const receiver = new AwsLambdaReceiver({ signingSecret });
-    const app = new App({ token: botToken, receiver });
+    const app = new App({ token: botToken, signingSecret });
     registerHandlers(app);
-    return receiver.start();
+    return { app, signingSecret };
   })();
 
-  return lambdaHandlerPromise;
+  return appPromise;
 };
 
-// Lambda handler (Node.js 24ではcallback形式を公開しない)
-export const handler = async (
-  event: Parameters<AwsHandler>[0],
-  context: Parameters<AwsHandler>[1],
-) => {
-  const lambdaHandler = await getLambdaHandler();
-  return new Promise((resolve, reject) => {
-    lambdaHandler(event, context, (error, response) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve(response);
+// Function URLのHTTPイベントをPromise形式で直接処理する
+export const handler = async (event: APIGatewayProxyEventV2, _context: Context) => {
+  try {
+    const { app, signingSecret } = await getApp();
+    const rawBody = event.isBase64Encoded
+      ? Buffer.from(event.body ?? "", "base64").toString("utf8")
+      : event.body ?? "";
+    const headers = Object.fromEntries(
+      Object.entries(event.headers ?? {}).map(([key, value]) => [key.toLowerCase(), value ?? ""]),
+    );
+
+    verifySlackRequest({
+      signingSecret,
+      body: rawBody,
+      headers: {
+        "x-slack-signature": headers["x-slack-signature"],
+        "x-slack-request-timestamp": Number(headers["x-slack-request-timestamp"]),
+      },
     });
-  });
+
+    const contentType = headers["content-type"] ?? "";
+    const parsedBody = contentType.includes("application/json")
+      ? JSON.parse(rawBody)
+      : Object.fromEntries(new URLSearchParams(rawBody));
+    // Slackのモーダル操作は payload フォーム項目内にJSONで格納される。
+    // Slash Commandはフォーム項目を直接送るため、payloadがある場合だけ展開する。
+    const body = typeof parsedBody.payload === "string"
+      ? JSON.parse(parsedBody.payload)
+      : parsedBody;
+
+    console.log("Slack event received", {
+      type: body.type ?? "slash_command",
+      command: body.command,
+      callbackId: body.view?.callback_id,
+      actionId: body.actions?.[0]?.action_id,
+    });
+
+    const response = await new Promise<unknown>((resolve, reject) => {
+      let acknowledged = false;
+      const ack = async (payload?: unknown) => {
+        if (!acknowledged) {
+          acknowledged = true;
+          resolve(payload ?? {});
+        }
+      };
+      void app.processEvent({ body, ack }).catch((error) => {
+        console.error("Slack event processing error:", error);
+        reject(error);
+      });
+    });
+
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(response),
+    };
+  } catch (error) {
+    console.error("Slack Lambda execution error:", error);
+    return {
+      statusCode: 500,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ error: "Internal Server Error" }),
+    };
+  }
 };
