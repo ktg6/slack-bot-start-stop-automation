@@ -75,6 +75,36 @@ variable "outlook_calendar_email" {
   default     = ""
 }
 
+variable "outlook_authority" {
+  description = "Microsoft Entra OAuth authority URL"
+  type        = string
+  default     = "https://login.microsoftonline.com/common"
+}
+
+variable "outlook_redirect_uri" {
+  description = "OAuth callback redirect URI"
+  type        = string
+  default     = ""
+}
+
+variable "outlook_refresh_token_secret_arn" {
+  description = "Secrets Manager ARN for Outlook refresh token"
+  type        = string
+  default     = ""
+}
+
+variable "outlook_state_secret_arn" {
+  description = "Secrets Manager ARN for OAuth state signing key"
+  type        = string
+  default     = ""
+}
+
+variable "outlook_allowed_user_email" {
+  description = "Allowed Microsoft account email for Outlook OAuth"
+  type        = string
+  default     = ""
+}
+
 # staging/prod 環境のリソースID（本番運用時は tfvars で上書き）
 variable "staging_ec2_instance_ids" {
   description = "staging環境のEC2インスタンスID（カンマ区切り）"

@@ -18,6 +18,7 @@
     "slack-handler/**/*.ts",
     "resource-operator/**/*.ts",
     "outlook-sync/**/*.ts",
+    "outlook-auth/**/*.ts",
     "sfn-trigger/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]

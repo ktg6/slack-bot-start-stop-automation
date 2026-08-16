@@ -16,6 +16,7 @@ import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import {
   SecretsManagerClient,
   GetSecretValueCommand,
+  PutSecretValueCommand,
 } from "@aws-sdk/client-secrets-manager";
 import { WebClient } from "@slack/web-api";
 
@@ -26,20 +27,22 @@ const secrets = new SecretsManagerClient({});
 
 const stepFunctionsArn = process.env.STEP_FUNCTIONS_ARN ?? "";
 const slackChannelId = process.env.SLACK_CHANNEL_ID ?? "";
-const tenantId = process.env.OUTLOOK_TENANT_ID ?? "";
 const clientId = process.env.OUTLOOK_CLIENT_ID ?? "";
-const calendarEmail = process.env.OUTLOOK_CALENDAR_EMAIL ?? "";
-const sfnTriggerLambdaArn = process.env.SFN_TRIGGER_LAMBDA_ARN ?? "";
-const slackBotTokenSecretArn = process.env.SLACK_BOT_TOKEN_SECRET_ARN ?? "";
 const outlookClientSecretSecretArn = process.env.OUTLOOK_CLIENT_SECRET_SECRET_ARN ?? "";
+const sfnTriggerLambdaArn = process.env.SFN_TRIGGER_LAMBDA_ARN ?? "";
+const awsRegion = process.env.AWS_REGION ?? "ap-northeast-1";
+const awsAccountId = sfnTriggerLambdaArn.split(":")[4] ?? "";
+const slackBotTokenSecretArn = process.env.SLACK_BOT_TOKEN_SECRET_ARN ?? "";
+const outlookRefreshTokenSecretArn = process.env.OUTLOOK_REFRESH_TOKEN_SECRET_ARN ?? "";
 const rulePrefix = "start-stop-";
 const maxRules = parseInt(process.env.MAX_RULES ?? "40", 10);
 
 let slackClientPromise: Promise<WebClient> | null = null;
+let outlookRefreshTokenPromise: Promise<string> | null = null;
 let outlookClientSecretPromise: Promise<string> | null = null;
 
-// 環境名とリソースIDのマッピング用
-const ENVIRONMENTS = ["dev", "staging", "prod"];
+// テスト運用ではOutlookカレンダーをdev環境だけに紐付ける
+const OUTLOOK_ENVIRONMENT = "dev";
 
 interface CalendarEvent {
   subject: string;
@@ -47,6 +50,20 @@ interface CalendarEvent {
   end: { dateTime: string; timeZone: string };
   isCancelled: boolean;
 }
+
+const isUtcTimeZone = (timeZone: string): boolean =>
+  ["UTC", "Coordinated Universal Time", "Etc/UTC"].includes(timeZone);
+
+const toUtcDate = (dateTime: string, timeZone: string): Date => {
+  // UTCで返された場合は、そのままUTCとして解釈する。
+  if (isUtcTimeZone(timeZone)) {
+    return new Date(`${dateTime}Z`);
+  }
+
+  // Tokyo Standard Timeなど、オフセットのない日本時間として返された場合。
+  const jstDate = new Date(`${dateTime}Z`);
+  return new Date(jstDate.getTime() - 9 * 60 * 60 * 1000);
+};
 
 interface ScheduleRule {
   name: string;
@@ -77,24 +94,39 @@ const getSlackClient = async (): Promise<WebClient> => {
   return slackClientPromise;
 };
 
+const getOutlookRefreshToken = async (): Promise<string> => {
+  if (outlookRefreshTokenPromise) return outlookRefreshTokenPromise;
+  outlookRefreshTokenPromise = (async () => {
+    const secretValue = await getSecret(outlookRefreshTokenSecretArn);
+    if (!secretValue) throw new Error("Outlook refresh token is not configured");
+    try {
+      const parsed = JSON.parse(secretValue) as { refresh_token?: string };
+      if (!parsed.refresh_token) throw new Error("refresh_token is missing");
+      return parsed.refresh_token;
+    } catch (error) {
+      throw new Error(`Invalid Outlook refresh token secret: ${String(error)}`);
+    }
+  })();
+  return outlookRefreshTokenPromise;
+};
+
 const getOutlookClientSecret = async (): Promise<string> => {
   if (outlookClientSecretPromise) return outlookClientSecretPromise;
-  outlookClientSecretPromise = (async () => {
-    const secretValue = await getSecret(outlookClientSecretSecretArn);
-    return secretValue || (process.env.OUTLOOK_CLIENT_SECRET ?? "");
-  })();
+  outlookClientSecretPromise = getSecret(outlookClientSecretSecretArn);
   return outlookClientSecretPromise;
 };
 
-// OAuth 2.0 Client Credentials Flow でトークン取得
+// OAuth 2.0 Refresh Token Flow で委任アクセストークンを取得
 const getAccessToken = async (): Promise<string> => {
+  const refreshToken = await getOutlookRefreshToken();
   const clientSecret = await getOutlookClientSecret();
-  const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
+  const tokenUrl = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
   const params = new URLSearchParams({
     client_id: clientId,
     client_secret: clientSecret,
-    scope: "https://graph.microsoft.com/.default",
-    grant_type: "client_credentials",
+    refresh_token: refreshToken,
+    scope: "openid profile offline_access User.Read Calendars.Read",
+    grant_type: "refresh_token",
   });
 
   const response = await fetch(tokenUrl, {
@@ -107,7 +139,17 @@ const getAccessToken = async (): Promise<string> => {
     throw new Error(`Token request failed: ${response.status}`);
   }
 
-  const data = (await response.json()) as { access_token: string };
+  const data = (await response.json()) as {
+    access_token: string;
+    refresh_token?: string;
+  };
+  if (data.refresh_token && data.refresh_token !== refreshToken) {
+    await secrets.send(new PutSecretValueCommand({
+      SecretId: outlookRefreshTokenSecretArn,
+      SecretString: JSON.stringify({ refresh_token: data.refresh_token }),
+    }));
+    outlookRefreshTokenPromise = Promise.resolve(data.refresh_token);
+  }
   return data.access_token;
 };
 
@@ -118,69 +160,83 @@ const getCalendarEvents = async (accessToken: string): Promise<CalendarEvent[]> 
   const endDate = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
 
   const url =
-    `https://graph.microsoft.com/v1.0/users/${calendarEmail}/calendarView` +
+    "https://graph.microsoft.com/v1.0/me/calendarView" +
     `?startDateTime=${startDate.toISOString()}` +
     `&endDateTime=${endDate.toISOString()}` +
     `&$select=subject,start,end,isCancelled` +
     `&$top=100`;
 
   const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Prefer: 'outlook.timezone="Tokyo Standard Time"',
+    },
   });
 
   if (!response.ok) {
+    const errorBody = await response.text();
+    console.error(
+      "Calendar request failed",
+      response.status,
+      response.headers.get("www-authenticate"),
+      errorBody,
+    );
     throw new Error(`Calendar request failed: ${response.status}`);
   }
 
   const data = (await response.json()) as { value: CalendarEvent[] };
+  console.log("Outlook calendar events", {
+    count: data.value.length,
+    events: data.value.map((event) => ({
+      subject: event.subject,
+      start: event.start,
+      end: event.end,
+      isCancelled: event.isCancelled,
+    })),
+  });
   return data.value;
 };
 
-// イベントからスケジュールルールを解析
-// 件名フォーマット: "[環境名] 起動" or "[環境名] 停止"
+// Outlookイベントからルールを解析する。
+// 件名は使用せず、開始時刻を起動、終了時刻を停止として扱う。
 const parseEventToRules = (events: CalendarEvent[]): ScheduleRule[] => {
   const rules: ScheduleRule[] = [];
 
   for (const event of events) {
     if (event.isCancelled) continue;
-    if (event.subject.includes("キャンセル済み")) continue;
+    const addRule = (action: "start" | "stop", utcTime: Date): void => {
+      if (utcTime < new Date()) return;
 
-    const match = event.subject.match(/\[(\w+)\]\s*(起動|停止)/);
-    if (!match) continue;
+      // EventBridgeのCronはUTCのままにし、ルール名だけJSTで表記する。
+      const jstTime = new Date(utcTime.getTime() + 9 * 60 * 60 * 1000);
+      const ruleName =
+        `${rulePrefix}${OUTLOOK_ENVIRONMENT}-${action}` +
+        `-${jstTime.getUTCFullYear()}` +
+        `${String(jstTime.getUTCMonth() + 1).padStart(2, "0")}` +
+        `${String(jstTime.getUTCDate()).padStart(2, "0")}` +
+        `-${String(jstTime.getUTCHours()).padStart(2, "0")}` +
+        `${String(jstTime.getUTCMinutes()).padStart(2, "0")}`;
 
-    const [, environment, actionText] = match;
-    if (!ENVIRONMENTS.includes(environment)) continue;
+      rules.push({
+        name: ruleName,
+        environment: OUTLOOK_ENVIRONMENT,
+        action,
+        cronExpression:
+          `cron(${utcTime.getUTCMinutes()} ${utcTime.getUTCHours()} ` +
+          `${utcTime.getUTCDate()} ${utcTime.getUTCMonth() + 1} ? ` +
+          `${utcTime.getUTCFullYear()})`,
+        scheduledTime: utcTime,
+      });
+    };
 
-    const action: "start" | "stop" = actionText === "起動" ? "start" : "stop";
-    const startTime = new Date(event.start.dateTime + "Z");
-
-    // JSTからUTCに変換（Outlookがlocal timeで返す場合の対応）
-    const jstOffset = 9 * 60 * 60 * 1000;
-    const utcTime = new Date(startTime.getTime() - jstOffset);
-
-    // 過去のイベントはスキップ
-    if (utcTime < new Date()) continue;
-
-    const ruleName =
-      `${rulePrefix}${environment}-${action}` +
-      `-${utcTime.getFullYear()}` +
-      `${String(utcTime.getMonth() + 1).padStart(2, "0")}` +
-      `${String(utcTime.getDate()).padStart(2, "0")}` +
-      `-${String(utcTime.getUTCHours()).padStart(2, "0")}` +
-      `${String(utcTime.getUTCMinutes()).padStart(2, "0")}`;
-
-    const cronExpression =
-      `cron(${utcTime.getUTCMinutes()} ${utcTime.getUTCHours()} ` +
-      `${utcTime.getUTCDate()} ${utcTime.getUTCMonth() + 1} ? ` +
-      `${utcTime.getUTCFullYear()})`;
-
-    rules.push({
-      name: ruleName,
-      environment,
-      action,
-      cronExpression,
-      scheduledTime: utcTime,
-    });
+    addRule(
+      "start",
+      toUtcDate(event.start.dateTime, event.start.timeZone),
+    );
+    addRule(
+      "stop",
+      toUtcDate(event.end.dateTime, event.end.timeZone),
+    );
   }
 
   return rules;
@@ -243,7 +299,7 @@ const createRule = async (rule: ScheduleRule): Promise<void> => {
         StatementId: `${rule.name}-permission`,
         Action: "lambda:InvokeFunction",
         Principal: "events.amazonaws.com",
-        SourceArn: `arn:aws:events:*:*:rule/${rule.name}`,
+        SourceArn: `arn:aws:events:${awsRegion}:${awsAccountId}:rule/${rule.name}`,
       })
     );
   } catch (err: unknown) {
@@ -351,6 +407,12 @@ export const handler = async (): Promise<{ statusCode: number; body: string }> =
 
     // 2. イベントをスケジュールルールに変換
     const desiredRules = parseEventToRules(events);
+    console.log("Outlook desired rules", desiredRules.map((rule) => ({
+      name: rule.name,
+      environment: rule.environment,
+      action: rule.action,
+      scheduledTime: rule.scheduledTime.toISOString(),
+    })));
 
     // ルール数上限チェック
     if (desiredRules.length > maxRules) {

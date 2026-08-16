@@ -98,15 +98,12 @@ resource "aws_lambda_function" "outlook_sync" {
 
   environment {
     variables = {
-      SLACK_BOT_TOKEN                  = var.slack_bot_token
       SLACK_BOT_TOKEN_SECRET_ARN       = var.slack_bot_token_secret_arn
       SLACK_CHANNEL_ID                 = var.slack_channel_id
       STEP_FUNCTIONS_ARN               = aws_sfn_state_machine.main.arn
-      OUTLOOK_TENANT_ID                = var.outlook_tenant_id
       OUTLOOK_CLIENT_ID                = var.outlook_client_id
-      OUTLOOK_CLIENT_SECRET            = var.outlook_client_secret
       OUTLOOK_CLIENT_SECRET_SECRET_ARN = var.outlook_client_secret_secret_arn
-      OUTLOOK_CALENDAR_EMAIL           = var.outlook_calendar_email
+      OUTLOOK_REFRESH_TOKEN_SECRET_ARN = var.outlook_refresh_token_secret_arn
       SFN_TRIGGER_LAMBDA_ARN           = aws_lambda_function.sfn_trigger.arn
     }
   }
@@ -114,6 +111,56 @@ resource "aws_lambda_function" "outlook_sync" {
   lifecycle {
     ignore_changes = [filename, source_code_hash]
   }
+}
+
+# ---------- outlook-auth Lambda ----------
+resource "aws_lambda_function" "outlook_auth" {
+  function_name = "${var.project_name}-outlook-auth"
+  role          = aws_iam_role.outlook_auth.arn
+  handler       = "outlook-auth/index.handler"
+  runtime       = "nodejs24.x"
+  timeout       = 30
+  memory_size   = 256
+
+  filename         = data.archive_file.dummy.output_path
+  source_code_hash = data.archive_file.dummy.output_base64sha256
+
+  environment {
+    variables = {
+      OUTLOOK_AUTHORITY                = var.outlook_authority
+      OUTLOOK_CLIENT_ID                = var.outlook_client_id
+      OUTLOOK_CLIENT_SECRET_SECRET_ARN = var.outlook_client_secret_secret_arn
+      OUTLOOK_REDIRECT_URI             = var.outlook_redirect_uri
+      OUTLOOK_REFRESH_TOKEN_SECRET_ARN = var.outlook_refresh_token_secret_arn
+      OUTLOOK_STATE_SECRET_ARN         = var.outlook_state_secret_arn
+      OUTLOOK_ALLOWED_USER_EMAIL       = var.outlook_allowed_user_email
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+  }
+}
+
+resource "aws_lambda_function_url" "outlook_auth" {
+  function_name      = aws_lambda_function.outlook_auth.function_name
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "outlook_auth_function_url" {
+  statement_id           = "AllowPublicFunctionUrlInvoke"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.outlook_auth.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
+}
+
+resource "aws_lambda_permission" "outlook_auth_function_url_invoke" {
+  statement_id             = "AllowPublicFunctionUrlInvokeFunction"
+  action                   = "lambda:InvokeFunction"
+  function_name            = aws_lambda_function.outlook_auth.function_name
+  principal                = "*"
+  invoked_via_function_url = true
 }
 
 # ---------- Step Functions トリガー Lambda ----------
