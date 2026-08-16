@@ -7,9 +7,20 @@ locals {
   resource_operator_secret_arns = compact([
     var.slack_bot_token_secret_arn,
   ])
-  outlook_sync_secret_arns = compact([
+  outlook_sync_read_secret_arns = compact([
     var.slack_bot_token_secret_arn,
     var.outlook_client_secret_secret_arn,
+    var.outlook_refresh_token_secret_arn,
+  ])
+  outlook_sync_write_secret_arns = compact([
+    var.outlook_refresh_token_secret_arn,
+  ])
+  outlook_auth_read_secret_arns = compact([
+    var.outlook_client_secret_secret_arn,
+    var.outlook_state_secret_arn,
+  ])
+  outlook_auth_write_secret_arns = compact([
+    var.outlook_refresh_token_secret_arn,
   ])
 }
 
@@ -129,10 +140,17 @@ data "aws_iam_policy_document" "outlook_sync" {
     resources = ["arn:aws:ssm:${var.aws_region}:*:parameter/start-stop/*"]
   }
   dynamic "statement" {
-    for_each = length(local.outlook_sync_secret_arns) > 0 ? [1] : []
+    for_each = length(local.outlook_sync_read_secret_arns) > 0 ? [1] : []
     content {
       actions   = ["secretsmanager:GetSecretValue"]
-      resources = local.outlook_sync_secret_arns
+      resources = local.outlook_sync_read_secret_arns
+    }
+  }
+  dynamic "statement" {
+    for_each = length(local.outlook_sync_write_secret_arns) > 0 ? [1] : []
+    content {
+      actions   = ["secretsmanager:PutSecretValue"]
+      resources = local.outlook_sync_write_secret_arns
     }
   }
 }
@@ -141,6 +159,39 @@ resource "aws_iam_role_policy" "outlook_sync" {
   name   = "${var.project_name}-outlook-sync-policy"
   role   = aws_iam_role.outlook_sync.id
   policy = data.aws_iam_policy_document.outlook_sync.json
+}
+
+# ---------- outlook-auth Lambda ロール ----------
+resource "aws_iam_role" "outlook_auth" {
+  name               = "${var.project_name}-outlook-auth-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
+data "aws_iam_policy_document" "outlook_auth" {
+  statement {
+    actions   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["arn:aws:logs:*:*:*"]
+  }
+  dynamic "statement" {
+    for_each = length(local.outlook_auth_read_secret_arns) > 0 ? [1] : []
+    content {
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = local.outlook_auth_read_secret_arns
+    }
+  }
+  dynamic "statement" {
+    for_each = length(local.outlook_auth_write_secret_arns) > 0 ? [1] : []
+    content {
+      actions   = ["secretsmanager:PutSecretValue"]
+      resources = local.outlook_auth_write_secret_arns
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "outlook_auth" {
+  name   = "${var.project_name}-outlook-auth-policy"
+  role   = aws_iam_role.outlook_auth.id
+  policy = data.aws_iam_policy_document.outlook_auth.json
 }
 
 # ---------- Step Functions ロール ----------

@@ -23,6 +23,11 @@ output "outlook_sync_lambda_arn" {
   value       = aws_lambda_function.outlook_sync.arn
 }
 
+output "outlook_auth_function_url" {
+  description = "Outlook OAuth認証用Lambda Function URL"
+  value       = aws_lambda_function_url.outlook_auth.function_url
+}
+
 output "rds_master_user_secret_arn" {
   description = "RDSマスターパスワードが格納されたSecrets Manager ARN（パスワード確認時に使用）"
   value       = var.create_demo_rds ? aws_db_instance.demo[0].master_user_secret[0].secret_arn : null
