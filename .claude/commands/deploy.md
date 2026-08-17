@@ -22,6 +22,10 @@ aws lambda update-function-code \
   --zip-file fileb://lambdas/lambda-package.zip
 
 aws lambda update-function-code \
+  --function-name start-stop-outlook-auth \
+  --zip-file fileb://lambdas/lambda-package.zip
+
+aws lambda update-function-code \
   --function-name start-stop-sfn-trigger \
   --zip-file fileb://lambdas/lambda-package.zip
 ```

@@ -18,10 +18,14 @@ Slack Channel ──/start-stop──▶ Lambda Function URL
                                     │
                               Slack通知 (完了/エラー)
 
-EventBridge (1h毎) ──▶ outlook-sync Lambda
+(初回のみ) ブラウザ ──▶ outlook-auth Lambda ──▶ Microsoft Entra OAuth同意
+                                                      │
+                                          Secrets Manager (refresh token保存)
+
+EventBridge (1日2回: 0時/12時 JST) ──▶ outlook-sync Lambda
                             │
                       Outlook Graph API
-                      カレンダー読み取り
+                      カレンダー読み取り (dev環境固定)
                             │
                       EventBridgeルール
                       自動生成/削除
@@ -51,14 +55,17 @@ EventBridge (1h毎) ──▶ outlook-sync Lambda
 ## Outlook 連携設定（任意）
 
 1. [Microsoft Entra管理センター](https://entra.microsoft.com/) でアプリ登録
-2. API権限を付与:
-   - `Calendars.Read` (アプリケーション権限)
-   - `User.Read.All` (アプリケーション権限)
-3. 管理者の同意を付与
+2. API権限（**委任されたアクセス許可**）を付与:
+   - `openid` / `profile` / `offline_access`
+   - `User.Read`
+   - `Calendars.Read`
+3. **認証情報**の「リダイレクトURI」(Web) に `terraform output outlook_auth_function_url` の値 + `/auth/callback` を登録
 4. Client ID / Client Secret / Tenant ID を控える
-5. Outlookカレンダーに以下の形式で予定を作成:
-   - 件名: `[dev] 起動` or `[dev] 停止`
-   - 開始時刻: 実行したい日時
+5. `terraform apply` 後、ブラウザで `<outlook_auth_function_url>/auth/start` にアクセスし、カレンダーを読み取りたいMicrosoftアカウントでサインイン・同意する
+   - `outlook_allowed_user_email` で指定したメールアドレスのアカウントのみ許可（不一致は403）
+   - refresh tokenは自動的にSecrets Managerへ保存される（以降は自動更新、再認証不要）
+6. Outlookカレンダーに予定を作成（**dev環境固定**、件名は任意）:
+   - 開始時刻 → 起動、終了時刻 → 停止として、それぞれ別々のEventBridgeルールが自動生成される
 
 ## デプロイ
 
@@ -89,8 +96,11 @@ slack_signing_secret_arn            = "arn:aws:secretsmanager:ap-northeast-1:123
 # Outlook連携（任意）
 outlook_tenant_id      = ""
 outlook_client_id      = ""
-outlook_calendar_email = ""
 outlook_client_secret_secret_arn = ""
+outlook_redirect_uri              = ""  # <outlook_auth_function_url>/auth/callback
+outlook_refresh_token_secret_arn  = ""
+outlook_state_secret_arn          = ""
+outlook_allowed_user_email        = ""  # 認証を許可するMicrosoftアカウント
 
 # 互換用（段階移行時のみ）
 # slack_bot_token      = "xoxb-your-token"
@@ -119,8 +129,15 @@ aws lambda update-function-code \
   --function-name start-stop-outlook-sync \
   --zip-file fileb://../lambdas/lambda-package.zip
 
+aws lambda update-function-code \
+  --function-name start-stop-outlook-auth \
+  --zip-file fileb://../lambdas/lambda-package.zip
+
 # 5. Slack AppのRequest URLを設定
 terraform output slack_handler_function_url
+
+# 6. (Outlook連携時) OAuth認証用Function URLを確認
+terraform output outlook_auth_function_url
 ```
 
 ## 使い方
@@ -136,11 +153,10 @@ terraform output slack_handler_function_url
 
 ### Outlookカレンダーから自動実行
 
-1. Outlookカレンダーに予定を作成
-   - 件名例: `[dev] 起動`, `[staging] 停止`
-2. 1時間ごとにカレンダーが同期され、EventBridgeルールが自動生成
+1. Outlookカレンダーに予定を作成（件名は任意、**dev環境固定**）
+2. 1日2回（0時・12時 JST）カレンダーが同期され、開始時刻→起動・終了時刻→停止としてEventBridgeルールが自動生成
 3. 予定時刻にStep Functionsが自動起動
-4. 毎朝9時に当日の予定がSlackチャンネルに通知
+4. 予定の追加・削除はSlackチャンネルに通知
 
 ## ディレクトリ構成
 
@@ -149,6 +165,7 @@ terraform output slack_handler_function_url
 │   ├── slack-handler/     # Slackコマンド受信・モーダル表示
 │   ├── resource-operator/ # EC2/RDS起動停止・ステータス確認
 │   ├── outlook-sync/      # Outlookカレンダー同期・EventBridgeルール管理
+│   ├── outlook-auth/      # Outlook OAuth認証（初回同意・refresh token発行）
 │   └── sfn-trigger/       # EventBridge→Step Functions起動
 ├── step-functions/
 │   └── definition.asl.json
